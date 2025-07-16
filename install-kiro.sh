@@ -384,6 +384,7 @@ uninstall_kiro() {
     local SYMLINK_DIR
     local DESKTOP_DIR
     local NEED_SUDO=true
+    local CLEAN_USER_DATA=false
     
     if [ "$1" == "--user" ]; then
         INSTALL_DIR="$USER_INSTALL_DIR"
@@ -394,6 +395,12 @@ uninstall_kiro() {
         INSTALL_DIR="$DEFAULT_INSTALL_DIR"
         SYMLINK_DIR="/usr/local/bin"
         DESKTOP_DIR="/usr/share/applications"
+    fi
+
+    # Check if a clean removal was requested
+    if [ "$2" == "--clean" ]; then
+        CLEAN_USER_DATA=true
+        echo -e "${YELLOW}Clean removal requested. User configuration will also be removed.${NC}"
     fi
     
     # Check if installation exists
@@ -448,6 +455,33 @@ uninstall_kiro() {
             fi
         fi
     fi
+
+    # Remove user configuration data if clean removal was requested
+    if [ "$CLEAN_USER_DATA" = true ]; then
+        echo -e "${YELLOW}Removing user configuration data...${NC}"
+        
+        # Common locations for user configuration data
+        local USER_CONFIG_DIRS=(
+            "$HOME/.config/kiro"
+            "$HOME/.kiro"
+            "$HOME/.local/state/kiro"
+            "$HOME/.local/share/kiro-extensions"
+            "$HOME/.cache/kiro"
+            "$HOME/.vscode-kiro"
+        )
+        
+        for dir in "${USER_CONFIG_DIRS[@]}"; do
+            if [ -d "$dir" ]; then
+                echo -e "${YELLOW}Removing $dir${NC}"
+                rm -rf "$dir"
+            fi
+        done
+        
+        echo -e "${GREEN}All user configuration data has been removed.${NC}"
+    else
+        echo -e "${BLUE}Note: User configuration data has been preserved.${NC}"
+        echo -e "${BLUE}To remove user data, rerun with the --clean flag.${NC}"
+    fi
     
     echo -e "${GREEN}Kiro has been successfully uninstalled!${NC}"
 }
@@ -461,6 +495,7 @@ print_usage() {
     echo "  --update         Update an existing Kiro installation"
     echo "  --uninstall      Uninstall Kiro"
     echo "  --user           Install/update/uninstall for current user only"
+    echo "  --clean          Remove all user configuration data during uninstallation"
     echo "  --help           Display this help and exit"
     echo
 }
@@ -543,6 +578,7 @@ print_header
 # Parse command line arguments
 ACTION="install"
 USER_ONLY=false
+CLEAN_UNINSTALL=false
 
 for arg in "$@"; do
     case $arg in
@@ -560,6 +596,10 @@ for arg in "$@"; do
             ;;
         --user)
             USER_ONLY=true
+            shift
+            ;;
+        --clean)
+            CLEAN_UNINSTALL=true
             shift
             ;;
         --help)
@@ -591,9 +631,17 @@ elif [ "$ACTION" == "update" ]; then
     fi
 elif [ "$ACTION" == "uninstall" ]; then
     if [ "$USER_ONLY" = true ]; then
-        uninstall_kiro "--user"
+        if [ "$CLEAN_UNINSTALL" = true ]; then
+            uninstall_kiro "--user" "--clean"
+        else
+            uninstall_kiro "--user"
+        fi
     else
-        uninstall_kiro
+        if [ "$CLEAN_UNINSTALL" = true ]; then
+            uninstall_kiro "" "--clean"
+        else
+            uninstall_kiro
+        fi
     fi
 fi
 
