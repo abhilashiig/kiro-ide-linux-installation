@@ -32,6 +32,8 @@ some-directory/
 
 ### Installation
 
+#### Option 1: Using the downloaded script
+
 ```bash
 # Make the script executable
 chmod +x install-kiro.sh
@@ -40,6 +42,25 @@ chmod +x install-kiro.sh
 ./install-kiro.sh         # For system-wide installation (requires sudo/root privileges)
 # OR
 ./install-kiro.sh --user  # For user-only installation (no sudo required)
+```
+
+#### Option 2: Direct installation using GitHub URL
+
+You can download and run the script directly from GitHub without having to download the script separately:
+
+```bash
+# Navigate to the extracted Kiro directory (where the Kiro folder is located)
+cd path/to/extracted/directory
+
+# Download and run the installer script in one command
+curl -s https://raw.githubusercontent.com/abhilashiig/kiro-ide-linux-installation/main/install-kiro.sh | bash
+# OR (for user-only installation)
+curl -s https://raw.githubusercontent.com/abhilashiig/kiro-ide-linux-installation/main/install-kiro.sh | bash -s -- --user
+
+# Alternatively using wget
+wget -qO- https://raw.githubusercontent.com/abhilashiig/kiro-ide-linux-installation/main/install-kiro.sh | bash
+# OR (for user-only installation)
+wget -qO- https://raw.githubusercontent.com/abhilashiig/kiro-ide-linux-installation/main/install-kiro.sh | bash -s -- --user
 ```
 
 ### Upgrading Kiro
