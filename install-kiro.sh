@@ -27,6 +27,12 @@ ICON_URL="https://img.icons8.com/nolan/64/visual-studio-code-2019.png"
 TEMP_ICO_FILE="/tmp/kiro_favicon.ico"
 TEMP_PNG_FILE="/tmp/kiro_icon.png"
 
+# Metadata and download URLs
+METADATA_URL="https://prod.download.desktop.kiro.dev/stable/metadata-linux-x64-stable.json"
+TEMP_DIR="/tmp/kiro_install_$(date +%s)"
+TEMP_METADATA_FILE="$TEMP_DIR/metadata.json"
+TEMP_ARCHIVE_FILE="$TEMP_DIR/kiro.tar.gz"
+
 print_header() {
     echo -e "${BLUE}======================================${NC}"
     echo -e "${BLUE}        Kiro Installer Script        ${NC}"
@@ -34,11 +40,80 @@ print_header() {
     echo
 }
 
+# Function to fetch metadata and latest version information
+fetch_metadata() {
+    echo -e "${YELLOW}Fetching latest Kiro metadata...${NC}"
+    
+    # Create temp directory
+    mkdir -p "$TEMP_DIR"
+    
+    # Download metadata file
+    if ! curl -s "$METADATA_URL" -o "$TEMP_METADATA_FILE"; then
+        echo -e "${RED}Error: Failed to download metadata from $METADATA_URL${NC}"
+        return 1
+    fi
+    
+    # Check if the metadata file was downloaded successfully
+    if [ ! -s "$TEMP_METADATA_FILE" ]; then
+        echo -e "${RED}Error: Downloaded metadata file is empty${NC}"
+        return 1
+    fi
+    
+    # Parse current version
+    CURRENT_VERSION=$(jq -r '.currentRelease' "$TEMP_METADATA_FILE")
+    if [ -z "$CURRENT_VERSION" ] || [ "$CURRENT_VERSION" == "null" ]; then
+        echo -e "${RED}Error: Could not determine current version from metadata${NC}"
+        return 1
+    fi
+    
+    echo -e "${GREEN}Latest version available: $CURRENT_VERSION${NC}"
+    return 0
+}
+
+# Function to download Kiro package and verification files
+download_kiro_package() {
+    echo -e "${YELLOW}Downloading Kiro package...${NC}"
+    
+    # Extract download URL for package
+    local PACKAGE_URL=$(jq -r '.releases[] | select(.updateTo.url | endswith(".tar.gz")) | .updateTo.url' "$TEMP_METADATA_FILE")
+    
+    # Download package
+    echo -e "${YELLOW}Downloading from: $PACKAGE_URL${NC}"
+    if ! curl -L "$PACKAGE_URL" -o "$TEMP_ARCHIVE_FILE"; then
+        echo -e "${RED}Error: Failed to download Kiro package${NC}"
+        return 1
+    fi
+    
+    # Extract to temporary location
+    echo -e "${YELLOW}Extracting Kiro package...${NC}"
+    mkdir -p "$TEMP_DIR/extracted"
+    if ! tar -xzf "$TEMP_ARCHIVE_FILE" -C "$TEMP_DIR/extracted"; then
+        echo -e "${RED}Error: Failed to extract Kiro package${NC}"
+        return 1
+    fi
+    
+    # Find the extracted directory name (should be something like 202507152342-distro-linux-x64)
+    local EXTRACTED_DIR=$(find "$TEMP_DIR/extracted" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+    
+    # Check if the expected structure exists
+    if [ -d "$EXTRACTED_DIR/Kiro" ]; then
+        echo -e "${GREEN}Found Kiro directory in extracted package.${NC}"
+        # Move the Kiro directory up to our expected location
+        mv "$EXTRACTED_DIR/Kiro" "$TEMP_DIR/extracted/Kiro"
+        # Remove the now-empty parent directory
+        rmdir "$EXTRACTED_DIR" 2>/dev/null || true
+    else
+        echo -e "${YELLOW}Warning: Did not find expected directory structure. Continuing anyway.${NC}"
+    fi
+    
+    return 0
+}
+
 check_dependencies() {
     echo -e "${YELLOW}Checking dependencies...${NC}"
     
     # Check for basic dependencies
-    DEPS=("wget" "tar" "readlink" "grep" "sed")
+    DEPS=("wget" "tar" "readlink" "grep" "sed" "curl" "jq")
     MISSING_DEPS=()
     
     for dep in "${DEPS[@]}"; do
@@ -90,22 +165,99 @@ check_dependencies() {
 }
 
 install_kiro() {
-    local SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
-    local KIRO_DIR="$SCRIPT_DIR/Kiro"
+    echo -e "${YELLOW}Installing/Updating Kiro...${NC}"
     
-    echo -e "${YELLOW}Installing Kiro...${NC}"
-    
-    # Check if Kiro directory exists
-    if [ ! -d "$KIRO_DIR" ]; then
-        echo -e "${RED}Error: Kiro directory not found at $KIRO_DIR${NC}"
+    # First fetch metadata and download package
+    if ! fetch_metadata; then
+        echo -e "${RED}Error: Could not fetch Kiro metadata.${NC}"
         exit 1
     fi
     
-    # Determine installation method based on permissions
+    if ! download_kiro_package; then
+        echo -e "${RED}Error: Could not download Kiro package.${NC}"
+        exit 1
+    fi
+    
+    # Extracted files location
+    local KIRO_DIR="$TEMP_DIR/extracted"
+    
+    # Check if the Kiro directory exists in the extracted files
+    if [ -d "$KIRO_DIR/Kiro" ]; then
+        KIRO_DIR="$KIRO_DIR/Kiro"
+    fi
+    
+    # Check if the extracted directory is valid
+    if [ ! -d "$KIRO_DIR" ]; then
+        echo -e "${RED}Error: Invalid Kiro package extracted. Could not find Kiro directory.${NC}"
+        echo -e "${YELLOW}Contents found instead:${NC}"
+        find "$TEMP_DIR/extracted" -type f -o -type d | sort | head -n 20
+        exit 1
+    fi
+    
+    # Check for binary files
+    if [ ! -f "$KIRO_DIR/kiro" ] && [ ! -f "$KIRO_DIR/bin/kiro" ]; then
+        echo -e "${RED}Error: Invalid Kiro package extracted. Missing required executable files.${NC}"
+        echo -e "${YELLOW}Contents found instead in $KIRO_DIR:${NC}"
+        find "$KIRO_DIR" -maxdepth 2 -type f -o -type d | sort | head -n 20
+        exit 1
+    fi
+    
+    # Check for existing installation and back up configurations if needed
+    local CONFIG_BACKUP_DIR=""
     local INSTALL_DIR
     local SYMLINK_DIR
     local DESKTOP_DIR
     local NEED_SUDO=true
+    
+    if [ "$1" == "--user" ]; then
+        INSTALL_DIR="$USER_INSTALL_DIR"
+        SYMLINK_DIR="$HOME/.local/bin"
+        DESKTOP_DIR="$HOME/.local/share/applications"
+        NEED_SUDO=false
+        APP_EXEC="$USER_INSTALL_DIR/bin/kiro"
+        APP_ICON="$USER_INSTALL_DIR/resources/app/resources/linux/kiro.png"
+        
+        # Create directories if they don't exist
+        mkdir -p "$SYMLINK_DIR"
+        mkdir -p "$DESKTOP_DIR"
+    else
+        INSTALL_DIR="$DEFAULT_INSTALL_DIR"
+        SYMLINK_DIR="/usr/local/bin"
+        DESKTOP_DIR="/usr/share/applications"
+    fi
+    
+    # Check if this is an update
+    if [ -d "$INSTALL_DIR" ]; then
+        echo -e "${YELLOW}Detected existing Kiro installation. Updating...${NC}"
+        
+        # Backup user configurations
+        CONFIG_BACKUP_DIR="/tmp/kiro_config_backup_$(date +%s)"
+        echo -e "${YELLOW}Backing up user configurations to $CONFIG_BACKUP_DIR...${NC}"
+        mkdir -p "$CONFIG_BACKUP_DIR"
+        
+        # Locate user data directory
+        local USER_DATA_DIRS=("$HOME/.config/kiro" "$HOME/.kiro")
+        for dir in "${USER_DATA_DIRS[@]}"; do
+            if [ -d "$dir" ]; then
+                echo -e "${YELLOW}Backing up $dir...${NC}"
+                cp -r "$dir" "$CONFIG_BACKUP_DIR/"
+            fi
+        done
+    fi
+    
+    # Check write permissions
+    if [ "$NEED_SUDO" = true ] && [ ! -w "$(dirname "$INSTALL_DIR")" ]; then
+        echo -e "${YELLOW}Installation to $INSTALL_DIR requires administrator privileges.${NC}"
+        echo -e "${YELLOW}Use --user flag to install to $USER_INSTALL_DIR instead.${NC}"
+        
+        # Ask for confirmation
+        read -p "Continue with sudo installation? (y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo -e "${RED}Installation cancelled.${NC}"
+            exit 1
+        fi
+    fi
     
     if [ "$1" == "--user" ]; then
         INSTALL_DIR="$USER_INSTALL_DIR"
@@ -217,164 +369,13 @@ StartupNotify=true
         fi
     fi
     
+    # Show completion message
     echo -e "${GREEN}Kiro has been successfully installed!${NC}"
-}
-
-update_kiro() {
-    echo -e "${YELLOW}Updating Kiro...${NC}"
     
-    local SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
-    local KIRO_DIR="$SCRIPT_DIR/Kiro"
-    local INSTALL_DIR
-    local SYMLINK_DIR
-    local DESKTOP_DIR
-    local NEED_SUDO=true
-    local CONFIG_BACKUP_DIR="/tmp/kiro_config_backup_$(date +%s)"
-    
-    # Check if Kiro directory exists
-    if [ ! -d "$KIRO_DIR" ]; then
-        echo -e "${RED}Error: Kiro update package not found at $KIRO_DIR${NC}"
-        exit 1
+    # If this was an update and we backed up configurations, show the backup message
+    if [ -n "$CONFIG_BACKUP_DIR" ]; then
+        echo -e "${YELLOW}A backup of your configurations was created at $CONFIG_BACKUP_DIR${NC}"
     fi
-    
-    if [ "$1" == "--user" ]; then
-        INSTALL_DIR="$USER_INSTALL_DIR"
-        SYMLINK_DIR="$HOME/.local/bin"
-        DESKTOP_DIR="$HOME/.local/share/applications"
-        NEED_SUDO=false
-    else
-        INSTALL_DIR="$DEFAULT_INSTALL_DIR"
-        SYMLINK_DIR="/usr/local/bin"
-        DESKTOP_DIR="/usr/share/applications"
-    fi
-    
-    # Check if installation exists
-    if [ ! -d "$INSTALL_DIR" ]; then
-        echo -e "${YELLOW}Kiro is not installed at $INSTALL_DIR.${NC}"
-        
-        # Check alternative installation
-        if [ "$1" == "--user" ] && [ -d "$DEFAULT_INSTALL_DIR" ]; then
-            echo -e "${YELLOW}Kiro might be installed at $DEFAULT_INSTALL_DIR. Use the script without the --user flag to update.${NC}"
-        elif [ "$1" != "--user" ] && [ -d "$USER_INSTALL_DIR" ]; then
-            echo -e "${YELLOW}Kiro might be installed at $USER_INSTALL_DIR. Use the --user flag to update.${NC}"
-        else
-            echo -e "${RED}Kiro installation not found. Please use --install instead.${NC}"
-            exit 1
-        fi
-        
-        return 1
-    fi
-    
-    # Check write permissions
-    if [ "$NEED_SUDO" = true ] && [ ! -w "$INSTALL_DIR" ]; then
-        echo -e "${YELLOW}Updating Kiro at $INSTALL_DIR requires administrator privileges.${NC}"
-        
-        # Ask for confirmation
-        read -p "Continue with sudo update? (y/n) " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            echo -e "${RED}Update cancelled.${NC}"
-            exit 1
-        fi
-    fi
-    
-    # Backup user configurations
-    echo -e "${YELLOW}Backing up user configurations...${NC}"
-    mkdir -p "$CONFIG_BACKUP_DIR"
-    
-    # Locate user data directory
-    local USER_DATA_DIRS=("$HOME/.config/kiro" "$HOME/.kiro")
-    for dir in "${USER_DATA_DIRS[@]}"; do
-        if [ -d "$dir" ]; then
-            echo -e "${YELLOW}Backing up $dir...${NC}"
-            cp -r "$dir" "$CONFIG_BACKUP_DIR/"
-        fi
-    done
-    
-    # Update Kiro files
-    echo -e "${YELLOW}Updating Kiro to new version...${NC}"
-    if [ "$NEED_SUDO" = true ]; then
-        # Preserve executable permissions on important files
-        sudo rm -rf "$INSTALL_DIR"
-        sudo mkdir -p "$INSTALL_DIR"
-        sudo cp -r "$KIRO_DIR"/* "$INSTALL_DIR"
-    else
-        rm -rf "$INSTALL_DIR"
-        mkdir -p "$INSTALL_DIR"
-        cp -r "$KIRO_DIR"/* "$INSTALL_DIR"
-    fi
-    
-    # Set executable permissions
-    echo -e "${YELLOW}Setting permissions...${NC}"
-    if [ "$NEED_SUDO" = true ]; then
-        sudo chmod +x "$INSTALL_DIR/kiro"
-        sudo chmod +x "$INSTALL_DIR/bin/kiro"
-        sudo chmod +x "$INSTALL_DIR/chrome-sandbox"
-        sudo chmod 4755 "$INSTALL_DIR/chrome-sandbox"
-    else
-        chmod +x "$INSTALL_DIR/kiro"
-        chmod +x "$INSTALL_DIR/bin/kiro"
-        chmod +x "$INSTALL_DIR/chrome-sandbox"
-        chmod 4755 "$INSTALL_DIR/chrome-sandbox"
-    fi
-    
-    # Update symbolic link
-    echo -e "${YELLOW}Updating symbolic link...${NC}"
-    if [ "$NEED_SUDO" = true ]; then
-        sudo ln -sf "$INSTALL_DIR/bin/kiro" "$SYMLINK_DIR/kiro"
-    else
-        ln -sf "$INSTALL_DIR/bin/kiro" "$SYMLINK_DIR/kiro"
-    fi
-    
-    # Update desktop file
-    echo -e "${YELLOW}Updating desktop entry...${NC}"
-    
-    # Find icon path
-    local ICON_PATH
-    if [ -f "$INSTALL_DIR/resources/app/resources/linux/kiro.png" ]; then
-        ICON_PATH="$INSTALL_DIR/resources/app/resources/linux/kiro.png"
-    elif [ -f "$INSTALL_DIR/resources/app/resources/app.png" ]; then
-        ICON_PATH="$INSTALL_DIR/resources/app/resources/app.png"
-    else
-        # Download favicon as icon
-        download_favicon "$INSTALL_DIR" "$NEED_SUDO"
-        ICON_PATH="$INSTALL_DIR/resources/app/resources/linux/kiro.png"
-    fi
-    
-    # Create desktop file content
-    local DESKTOP_FILE_CONTENT="[Desktop Entry]
-Name=Kiro
-Comment=$APP_COMMENT
-Exec=$INSTALL_DIR/bin/kiro %F
-Icon=$ICON_PATH
-Terminal=false
-Type=Application
-Categories=Development;IDE;
-MimeType=text/plain;inode/directory;
-StartupWMClass=kiro
-StartupNotify=true
-"
-
-    # Write desktop file
-    if [ "$NEED_SUDO" = true ]; then
-        echo "$DESKTOP_FILE_CONTENT" | sudo tee "$DESKTOP_DIR/kiro.desktop" > /dev/null
-        sudo chmod +x "$DESKTOP_DIR/kiro.desktop"
-    else
-        echo "$DESKTOP_FILE_CONTENT" > "$DESKTOP_DIR/kiro.desktop"
-        chmod +x "$DESKTOP_DIR/kiro.desktop"
-    fi
-    
-    # Update desktop database if command exists
-    if command -v update-desktop-database &> /dev/null; then
-        if [ "$NEED_SUDO" = true ]; then
-            sudo update-desktop-database "$DESKTOP_DIR"
-        else
-            update-desktop-database "$DESKTOP_DIR"
-        fi
-    fi
-    
-    echo -e "${GREEN}Kiro has been successfully updated!${NC}"
-    echo -e "${YELLOW}A backup of your configurations was created at $CONFIG_BACKUP_DIR${NC}"
 }
 
 uninstall_kiro() {
@@ -487,17 +488,16 @@ uninstall_kiro() {
 }
 
 print_usage() {
-    echo "Usage: $0 [OPTION]"
-    echo "Install, update, or uninstall Kiro."
-    echo
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
     echo "Options:"
-    echo "  --install        Install Kiro (default)"
-    echo "  --update         Update an existing Kiro installation"
-    echo "  --uninstall      Uninstall Kiro"
-    echo "  --user           Install/update/uninstall for current user only"
-    echo "  --clean          Remove all user configuration data during uninstallation"
-    echo "  --help           Display this help and exit"
-    echo
+    echo "  --install     Install or update Kiro (default)"
+    echo "  --update      Same as --install, will install or update automatically"
+    echo "  --uninstall   Uninstall Kiro"
+    echo "  --user        Perform operation for current user only (no admin privileges required)"
+    echo "  --clean       Remove user data and configurations during uninstall"
+    echo "  --help        Display this help message"
+    echo ""
 }
 
 download_favicon() {
@@ -582,12 +582,8 @@ CLEAN_UNINSTALL=false
 
 for arg in "$@"; do
     case $arg in
-        --install)
-            ACTION="install"
-            shift
-            ;;
-        --update)
-            ACTION="update"
+        --install | --update)
+            ACTION="install"  # Both install and update use the same function now
             shift
             ;;
         --uninstall)
@@ -622,13 +618,6 @@ if [ "$ACTION" == "install" ]; then
     else
         install_kiro
     fi
-elif [ "$ACTION" == "update" ]; then
-    check_dependencies
-    if [ "$USER_ONLY" = true ]; then
-        update_kiro "--user"
-    else
-        update_kiro
-    fi
 elif [ "$ACTION" == "uninstall" ]; then
     if [ "$USER_ONLY" = true ]; then
         if [ "$CLEAN_UNINSTALL" = true ]; then
@@ -643,6 +632,12 @@ elif [ "$ACTION" == "uninstall" ]; then
             uninstall_kiro
         fi
     fi
+fi
+
+# Clean up temporary files
+if [ -d "$TEMP_DIR" ]; then
+    echo -e "${YELLOW}Cleaning up temporary files...${NC}"
+    rm -rf "$TEMP_DIR"
 fi
 
 exit 0
