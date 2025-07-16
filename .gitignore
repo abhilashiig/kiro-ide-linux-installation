@@ -1,0 +1,16 @@
+# Ignore Kiro folder
+Kiro/
+
+# Common ignored files and directories
+*.log
+*.tmp
+.DS_Store
+node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+ENV/
