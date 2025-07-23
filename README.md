@@ -108,6 +108,62 @@ Since the Kiro package may not include the official logo, this installer script 
 https://img.icons8.com/nolan/64/visual-studio-code-2019.png
 ```
 
+## Nix/NixOS Installation (Recommended for Nix users)
+
+If you are a [Nix](https://nixos.org/) or [NixOS](https://nixos.org/) user, you can use the provided Nix flake to install Kiro in a declarative and reproducible way.
+
+### How to Use This Flake
+
+**1. Enable Flakes:**
+
+If you haven't already, you'll need to enable Nix Flakes and the `nix-command` in your Nix configuration.
+
+**2. Run the Application:**
+
+You can run Kiro directly without installing it permanently:
+
+```bash
+# Run from GitHub
+nix run github:abhilashiig/kiro-ide-linux-installation
+
+# Or from a local clone
+nix run .
+```
+
+**3. Install the Package:**
+
+To install Kiro into your user profile:
+
+```bash
+nix profile install .
+```
+
+**4. Use in a NixOS Configuration:**
+
+You can add it to your system's packages in `/etc/nixos/configuration.nix`:
+
+```nix
+# /etc/nixos/configuration.nix
+{
+  inputs.kiro-flake.url = "github:abhilashiig/kiro-ide-linux-installation";
+
+  outputs = { self, nixpkgs, kiro-flake, ... }: {
+    nixosConfigurations.your-hostname = nixpkgs.lib.nixosSystem {
+      # ...
+      system = "x86_64-linux";
+      modules = [
+        # ...
+        ({ pkgs, ... }: {
+          environment.systemPackages = [
+            kiro-flake.packages.x86_64-linux.default
+          ];
+        })
+      ];
+    };
+  };
+}
+```
+
 ## License
 
 This installer script is provided as-is. Kiro itself is a product of AWS and subject to its own licensing terms.
