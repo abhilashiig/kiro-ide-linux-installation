@@ -23,7 +23,7 @@ APP_EXEC="/opt/kiro/bin/kiro"
 APP_ICON="/opt/kiro/resources/app/resources/linux/kiro.png"
 USER_APP_ICON="$HOME/.local/share/kiro/resources/app/resources/linux/kiro.png"
 FAVICON_URL="https://kiro.dev/favicon.ico"
-ICON_URL="https://img.icons8.com/nolan/64/visual-studio-code-2019.png"
+ICON_URL="./Kiro_1024x1024x32.png"
 TEMP_ICO_FILE="/tmp/kiro_favicon.ico"
 TEMP_PNG_FILE="/tmp/kiro_icon.png"
 
