@@ -70,6 +70,145 @@ fetch_metadata() {
     return 0
 }
 
+# Function to get the currently installed Kiro version
+get_installed_version() {
+    local install_dir="$1"
+    local installed_version=""
+    
+    # Check if Kiro is installed
+    if [ ! -d "$install_dir" ]; then
+        echo ""
+        return 1
+    fi
+    
+    # Try to get version from the executable using -v flag (Kiro specific)
+    if [ -f "$install_dir/bin/kiro" ]; then
+        installed_version=$("$install_dir/bin/kiro" -v 2>/dev/null | head -n 1 | tr -d ' \n\r')
+        # Validate version format (should be like 0.1.15)
+        if [[ ! "$installed_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            installed_version=""
+        fi
+    fi
+    
+    # If that fails, try the main executable
+    if [ -z "$installed_version" ] && [ -f "$install_dir/kiro" ]; then
+        installed_version=$("$install_dir/kiro" -v 2>/dev/null | head -n 1 | tr -d ' \n\r')
+        # Validate version format (should be like 0.1.15)
+        if [[ ! "$installed_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            installed_version=""
+        fi
+    fi
+    
+    # Also try --version as fallback
+    if [ -z "$installed_version" ] && [ -f "$install_dir/bin/kiro" ]; then
+        installed_version=$("$install_dir/bin/kiro" --version 2>/dev/null | head -n 1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+    fi
+    
+    if [ -z "$installed_version" ] && [ -f "$install_dir/kiro" ]; then
+        installed_version=$("$install_dir/kiro" --version 2>/dev/null | head -n 1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+    fi
+    
+    # Try to find version in package.json or version files
+    if [ -z "$installed_version" ]; then
+        local version_files=(
+            "$install_dir/resources/app/package.json"
+            "$install_dir/resources/package.json" 
+            "$install_dir/package.json"
+            "$install_dir/version"
+            "$install_dir/VERSION"
+        )
+        
+        for version_file in "${version_files[@]}"; do
+            if [ -f "$version_file" ]; then
+                if [[ "$version_file" == *.json ]]; then
+                    # Extract version from JSON file
+                    installed_version=$(jq -r '.version // empty' "$version_file" 2>/dev/null)
+                else
+                    # Read version from plain text file
+                    installed_version=$(cat "$version_file" 2>/dev/null | head -n 1 | tr -d ' \n\r')
+                fi
+                
+                # Validate version format
+                if [[ "$installed_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+                    break
+                else
+                    installed_version=""
+                fi
+            fi
+        done
+    fi
+    
+    echo "$installed_version"
+    return 0
+}
+
+# Function to compare version strings (returns 0 if v1 >= v2, 1 if v1 < v2)
+version_compare() {
+    local v1="$1"
+    local v2="$2"
+    
+    # Handle empty versions
+    if [ -z "$v1" ]; then
+        return 1  # No version installed, update needed
+    fi
+    if [ -z "$v2" ]; then
+        return 0  # No remote version, don't update
+    fi
+    
+    # Compare versions using sort -V (version sort)
+    if printf '%s\n%s\n' "$v1" "$v2" | sort -V -C 2>/dev/null; then
+        # v1 <= v2, check if they're equal
+        if [ "$v1" = "$v2" ]; then
+            return 0  # Same version
+        else
+            return 1  # v1 < v2, update needed
+        fi
+    else
+        return 0  # v1 > v2, no update needed
+    fi
+}
+
+# Function to check if update is needed
+check_update_needed() {
+    local install_dir="$1"
+    local force_update="${2:-false}"
+    
+    # If force update is requested, always update
+    if [ "$force_update" = true ]; then
+        echo -e "${YELLOW}Force update requested, skipping version check.${NC}"
+        return 0
+    fi
+    
+    # Get installed version
+    local installed_version
+    installed_version=$(get_installed_version "$install_dir")
+    
+    if [ -z "$installed_version" ]; then
+        echo -e "${YELLOW}No existing Kiro installation found. Proceeding with fresh installation.${NC}"
+        return 0  # Fresh install needed
+    fi
+    
+    echo -e "${BLUE}Currently installed version: $installed_version${NC}"
+    
+    # Fetch latest version if not already done
+    if [ -z "$CURRENT_VERSION" ]; then
+        if ! fetch_metadata; then
+            echo -e "${RED}Error: Could not fetch latest version information.${NC}"
+            return 1
+        fi
+    fi
+    
+    # Compare versions
+    if version_compare "$installed_version" "$CURRENT_VERSION"; then
+        echo -e "${GREEN}Kiro is already up to date (version $installed_version).${NC}"
+        echo -e "${BLUE}Use --force flag to reinstall anyway.${NC}"
+        return 1  # No update needed
+    else
+        echo -e "${YELLOW}Update available: $installed_version → $CURRENT_VERSION${NC}"
+        return 0  # Update needed
+    fi
+}
+
 # Function to download Kiro package and verification files
 download_kiro_package() {
     echo -e "${YELLOW}Downloading Kiro package...${NC}"
@@ -167,12 +306,38 @@ check_dependencies() {
 install_kiro() {
     echo -e "${YELLOW}Installing/Updating Kiro...${NC}"
     
-    # First fetch metadata and download package
+    # Determine installation directory based on user flag
+    local INSTALL_DIR
+    local FORCE_UPDATE=false
+    
+    if [ "$1" == "--user" ]; then
+        INSTALL_DIR="$USER_INSTALL_DIR"
+    elif [ "$1" == "--force" ]; then
+        INSTALL_DIR="$DEFAULT_INSTALL_DIR"
+        FORCE_UPDATE=true
+    elif [ "$1" == "--user" ] && [ "$2" == "--force" ]; then
+        INSTALL_DIR="$USER_INSTALL_DIR"
+        FORCE_UPDATE=true
+    elif [ "$2" == "--force" ]; then
+        INSTALL_DIR="$DEFAULT_INSTALL_DIR"
+        FORCE_UPDATE=true
+    else
+        INSTALL_DIR="$DEFAULT_INSTALL_DIR"
+    fi
+    
+    # First fetch metadata to get latest version
     if ! fetch_metadata; then
         echo -e "${RED}Error: Could not fetch Kiro metadata.${NC}"
         exit 1
     fi
     
+    # Check if update is needed
+    if ! check_update_needed "$INSTALL_DIR" "$FORCE_UPDATE"; then
+        # No update needed, exit gracefully
+        return 0
+    fi
+    
+    # Download package only if update is needed
     if ! download_kiro_package; then
         echo -e "${RED}Error: Could not download Kiro package.${NC}"
         exit 1
@@ -495,8 +660,17 @@ print_usage() {
     echo "  --update      Same as --install, will install or update automatically"
     echo "  --uninstall   Uninstall Kiro"
     echo "  --user        Perform operation for current user only (no admin privileges required)"
+    echo "  --force       Force reinstall even if the same version is already installed"
     echo "  --clean       Remove user data and configurations during uninstall"
     echo "  --help        Display this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0                    # Install/update Kiro system-wide"
+    echo "  $0 --user            # Install/update Kiro for current user only"
+    echo "  $0 --force           # Force reinstall latest version"
+    echo "  $0 --user --force    # Force reinstall for current user"
+    echo "  $0 --uninstall       # Remove system-wide installation"
+    echo "  $0 --uninstall --user --clean  # Remove user installation and data"
     echo ""
 }
 
@@ -578,6 +752,7 @@ print_header
 # Parse command line arguments
 ACTION="install"
 USER_ONLY=false
+FORCE_UPDATE=false
 CLEAN_UNINSTALL=false
 
 for arg in "$@"; do
@@ -592,6 +767,10 @@ for arg in "$@"; do
             ;;
         --user)
             USER_ONLY=true
+            shift
+            ;;
+        --force)
+            FORCE_UPDATE=true
             shift
             ;;
         --clean)
@@ -613,8 +792,12 @@ done
 # Execute the selected action
 if [ "$ACTION" == "install" ]; then
     check_dependencies
-    if [ "$USER_ONLY" = true ]; then
+    if [ "$USER_ONLY" = true ] && [ "$FORCE_UPDATE" = true ]; then
+        install_kiro "--user" "--force"
+    elif [ "$USER_ONLY" = true ]; then
         install_kiro "--user"
+    elif [ "$FORCE_UPDATE" = true ]; then
+        install_kiro "--force"
     else
         install_kiro
     fi
