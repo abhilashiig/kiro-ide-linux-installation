@@ -374,6 +374,7 @@ install_kiro() {
     local DESKTOP_DIR
     local NEED_SUDO=true
     
+    # Determine installation directories based on user flag
     if [ "$1" == "--user" ]; then
         INSTALL_DIR="$USER_INSTALL_DIR"
         SYMLINK_DIR="$HOME/.local/bin"
@@ -410,47 +411,24 @@ install_kiro() {
         done
     fi
     
-    # Check write permissions
+    # Check write permissions and handle confirmation
     if [ "$NEED_SUDO" = true ] && [ ! -w "$(dirname "$INSTALL_DIR")" ]; then
         echo -e "${YELLOW}Installation to $INSTALL_DIR requires administrator privileges.${NC}"
         echo -e "${YELLOW}Use --user flag to install to $USER_INSTALL_DIR instead.${NC}"
         
-        # Ask for confirmation
-        read -p "Continue with sudo installation? (y/n) " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            echo -e "${RED}Installation cancelled.${NC}"
-            exit 1
-        fi
-    fi
-    
-    if [ "$1" == "--user" ]; then
-        INSTALL_DIR="$USER_INSTALL_DIR"
-        SYMLINK_DIR="$HOME/.local/bin"
-        DESKTOP_DIR="$HOME/.local/share/applications"
-        NEED_SUDO=false
-        APP_EXEC="$USER_INSTALL_DIR/bin/kiro"
-        APP_ICON="$USER_INSTALL_DIR/resources/app/resources/linux/kiro.png"
-        
-        # Create directories if they don't exist
-        mkdir -p "$SYMLINK_DIR"
-        mkdir -p "$DESKTOP_DIR"
-    else
-        INSTALL_DIR="$DEFAULT_INSTALL_DIR"
-        SYMLINK_DIR="/usr/local/bin"
-        DESKTOP_DIR="/usr/share/applications"
-    fi
-    
-    # Check write permissions
-    if [ "$NEED_SUDO" = true ] && [ ! -w "$(dirname "$INSTALL_DIR")" ]; then
-        echo -e "${YELLOW}Installation to $INSTALL_DIR requires administrator privileges.${NC}"
-        echo -e "${YELLOW}Use --user flag to install to $USER_INSTALL_DIR instead.${NC}"
-        
-        # Ask for confirmation
-        read -p "Continue with sudo installation? (y/n) " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            echo -e "${RED}Installation cancelled.${NC}"
+        # Check if we're running in a pipe (like from curl) or interactive terminal
+        if [ -t 0 ]; then
+            # Interactive terminal - ask for confirmation
+            read -p "Continue with sudo installation? (y/n) " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                echo -e "${RED}Installation cancelled.${NC}"
+                exit 1
+            fi
+        else
+            # Running in pipe - default to cancelling for security
+            echo -e "${RED}Running in non-interactive mode. Use --user flag for user installation.${NC}"
+            echo -e "${YELLOW}Or run the script interactively to confirm sudo installation.${NC}"
             exit 1
         fi
     fi
