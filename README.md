@@ -1,112 +1,106 @@
-# Kiro Linux Installer Script
+# Kiro Linux Installation
 
-## What is it?
+Automated installer for [Kiro](https://kiro.dev/), an AI-powered development environment. This repository provides scripts to easily install, update, and manage Kiro on any Linux distribution.
 
-This is an installer script for [Kiro](https://kiro.dev/), an AI-powered development environment by AWS. While AWS provides `.deb` packages for Debian-based Linux distributions and a universal `.tar.gz` file for other distributions, this script simplifies the installation process for any Linux distribution, including Fedora, Arch, openSUSE, and others.
+## Quick Installation
 
-## Why was it created?
-
-This script was created to provide a seamless installation experience for Kiro on Linux distributions that don't have native package support. It handles all the necessary steps to properly install Kiro, including:
-
-- Checking and installing dependencies
-- Setting up proper file permissions
-- Creating desktop entries for easy access
-- Configuring system paths
-- Managing updates and uninstallation
-
-## How to use it
-
-### Prerequisites
-
-1. Download the Kiro `.tar.gz` file from [https://kiro.dev/](https://kiro.dev/)
-2. Extract the downloaded `.tar.gz` file
-3. Place this `install-kiro.sh` script at the same level as the extracted `Kiro` folder
-
-### Directory structure should look like:
-
-```
-some-directory/
-├── Kiro/             # The extracted Kiro folder from tar.gz
-└── install-kiro.sh   # This installation script
-```
-
-### Installation
-
-#### Option 1: Using the downloaded script
+The easiest way to install Kiro is using our clone-and-install script:
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/abhilashiig/kiro-ide-linux-installation/main/clone-and-install-kiro.sh | bash
+```
+
+This single command will:
+- Clone this repository to a temporary directory
+- Run the installation script automatically
+- Clean up temporary files when done
+
+## Manual Installation
+
+If you prefer more control over the process:
+
+```bash
+# Clone the repository
+git clone https://github.com/abhilashiig/kiro-ide-linux-installation.git
+cd kiro-ide-linux-installation
+
 # Make the script executable
-chmod +x install-kiro.sh
+chmod +x clone-and-install-kiro.sh
 
 # Run the installer
-./install-kiro.sh         # For system-wide installation (requires sudo/root privileges)
-# OR
-./install-kiro.sh --user  # For user-only installation (no sudo required)
+./clone-and-install-kiro.sh
 ```
 
-#### Option 2: Direct installation using GitHub URL
+## Installation Options
 
-You can download and run the script directly from GitHub without having to download the script separately:
-
+### System-wide Installation (default)
 ```bash
-# Navigate to the extracted Kiro directory (where the Kiro folder is located)
-cd path/to/extracted/directory
-
-# Download and run the installer script in one command
-curl -s https://raw.githubusercontent.com/abhilashiig/kiro-ide-linux-installation/main/install-kiro.sh | bash
-# OR (for user-only installation)
-curl -s https://raw.githubusercontent.com/abhilashiig/kiro-ide-linux-installation/main/install-kiro.sh | bash -s -- --user
-
-# Alternatively using wget
-wget -qO- https://raw.githubusercontent.com/abhilashiig/kiro-ide-linux-installation/main/install-kiro.sh | bash
-# OR (for user-only installation)
-wget -qO- https://raw.githubusercontent.com/abhilashiig/kiro-ide-linux-installation/main/install-kiro.sh | bash -s -- --user
+./clone-and-install-kiro.sh
 ```
+Installs Kiro to `/opt/kiro` (requires sudo)
 
-### Upgrading Kiro
-
-When a new version of Kiro is released:
-
-1. Download the new `.tar.gz` file from [https://kiro.dev/](https://kiro.dev/)
-2. Extract it to replace the existing `Kiro` folder
-3. Run the upgrade command:
-
+### User-only Installation
 ```bash
-./install-kiro.sh --update         # For system-wide upgrade
-# OR
-./install-kiro.sh --update --user  # For user-only upgrade
+./clone-and-install-kiro.sh --user
 ```
+Installs Kiro to `~/.local/share/kiro` (no sudo required)
 
-### Uninstallation
-
+### Force Reinstall
 ```bash
-./install-kiro.sh --uninstall                # System-wide uninstall
-# OR
-./install-kiro.sh --uninstall --user         # User-only uninstall
-# OR
-./install-kiro.sh --uninstall --clean        # Complete uninstall (removes all data)
+./clone-and-install-kiro.sh --force
+```
+Reinstalls even if the same version is already installed
+
+## Managing Kiro
+
+### Update Kiro
+```bash
+./clone-and-install-kiro.sh --update
+```
+The script automatically checks for updates and installs the latest version
+
+### Uninstall Kiro
+```bash
+# Remove installation only
+./clone-and-install-kiro.sh --uninstall
+
+# Remove installation and user data
+./clone-and-install-kiro.sh --uninstall --clean
 ```
 
-## Additional Options
+## What This Does
 
-Run `./install-kiro.sh --help` to see all available options and commands.
+The installation script handles everything automatically:
+- Downloads the latest Kiro release
+- Checks and installs required dependencies
+- Sets up proper file permissions
+- Creates desktop entries for easy access
+- Configures system paths
+- Manages version updates
+
+## Advanced Usage
+
+For more installation options, run:
+```bash
+./clone-and-install-kiro.sh --help
+```
 
 ## Compatibility
 
-This script works on all major Linux distributions, including but not limited to:
-- Fedora
+Works on all major Linux distributions:
+- Ubuntu/Debian
+- Fedora/CentOS/RHEL
 - Arch Linux
-- CentOS/RHEL
 - openSUSE
-- Ubuntu/Debian (although native .deb packages are available)
-- Other Linux distributions
+- And more
 
-## Notes on Icons/Logo
+## Requirements
 
-Since the Kiro package may not include the official logo, this installer script attempts to use a placeholder icon from:
-```
-https://img.icons8.com/nolan/64/visual-studio-code-2019.png
-```
+- `git` (for cloning the repository)
+- `curl` or `wget` (for downloading)
+- `bash` (for running the scripts)
+
+The installer will automatically check and install other required dependencies.
 
 ## License
 
