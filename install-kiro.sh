@@ -414,11 +414,11 @@ install_kiro() {
     # Check write permissions and handle confirmation
     if [ "$NEED_SUDO" = true ] && [ ! -w "$(dirname "$INSTALL_DIR")" ]; then
         echo -e "${YELLOW}Installation to $INSTALL_DIR requires administrator privileges.${NC}"
-        echo -e "${YELLOW}Use --user flag to install to $USER_INSTALL_DIR instead.${NC}"
         
         # Check if we're running in a pipe (like from curl) or interactive terminal
         if [ -t 0 ]; then
             # Interactive terminal - ask for confirmation
+            echo -e "${YELLOW}Use --user flag to install to $USER_INSTALL_DIR instead.${NC}"
             read -p "Continue with sudo installation? (y/n) " -n 1 -r
             echo
             if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -426,10 +426,9 @@ install_kiro() {
                 exit 1
             fi
         else
-            # Running in pipe - default to cancelling for security
-            echo -e "${RED}Running in non-interactive mode. Use --user flag for user installation.${NC}"
-            echo -e "${YELLOW}Or run the script interactively to confirm sudo installation.${NC}"
-            exit 1
+            # Running in pipe - proceed with sudo but warn user
+            echo -e "${YELLOW}Running in non-interactive mode. Proceeding with sudo installation.${NC}"
+            echo -e "${BLUE}You will be prompted for your password by sudo.${NC}"
         fi
     fi
     

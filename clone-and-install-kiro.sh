@@ -96,8 +96,8 @@ run_installer() {
     
     # Check if running in pipe and no --user flag provided
     if [ ! -t 0 ] && [[ ! "$*" =~ --user ]]; then
-        echo -e "${YELLOW}Note: Running via pipe (curl). For system-wide installation, sudo confirmation is required.${NC}"
-        echo -e "${YELLOW}Consider using --user flag for user-only installation (no sudo required).${NC}"
+        echo -e "${BLUE}Note: Running via pipe (curl). System-wide installation will proceed with sudo.${NC}"
+        echo -e "${BLUE}Use --user flag if you prefer user-only installation (no sudo required).${NC}"
         echo
     fi
     
