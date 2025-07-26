@@ -11,55 +11,49 @@ curl -fsSL https://raw.githubusercontent.com/abhilashiig/kiro-ide-linux-installa
 ```
 
 This single command will:
+
 - Clone this repository to a temporary directory
 - Run the installation script automatically
 - Clean up temporary files when done
 
-## Manual Installation
-
-If you prefer more control over the process:
-
-```bash
-# Clone the repository
-git clone https://github.com/abhilashiig/kiro-ide-linux-installation.git
-cd kiro-ide-linux-installation
-
-# Make the script executable
-chmod +x clone-and-install-kiro.sh
-
-# Run the installer
-./clone-and-install-kiro.sh
-```
-
 ## Installation Options
 
 ### System-wide Installation (default)
+
 ```bash
 ./clone-and-install-kiro.sh
 ```
+
 Installs Kiro to `/opt/kiro` (requires sudo)
 
 ### User-only Installation
+
 ```bash
 ./clone-and-install-kiro.sh --user
 ```
+
 Installs Kiro to `~/.local/share/kiro` (no sudo required)
 
 ### Force Reinstall
+
 ```bash
 ./clone-and-install-kiro.sh --force
 ```
+
 Reinstalls even if the same version is already installed
 
 ## Managing Kiro
 
 ### Update Kiro
+
 ```bash
 ./clone-and-install-kiro.sh --update
 ```
+
 The script automatically checks for updates and installs the latest version
 
 ### Uninstall Kiro
+
 ```bash
 # Remove installation only
 ./clone-and-install-kiro.sh --uninstall
@@ -71,6 +65,7 @@ The script automatically checks for updates and installs the latest version
 ## What This Does
 
 The installation script handles everything automatically:
+
 - Downloads the latest Kiro release
 - Checks and installs required dependencies
 - Sets up proper file permissions
@@ -81,6 +76,7 @@ The installation script handles everything automatically:
 ## Advanced Usage
 
 For more installation options, run:
+
 ```bash
 ./clone-and-install-kiro.sh --help
 ```
@@ -88,6 +84,7 @@ For more installation options, run:
 ## Compatibility
 
 Works on all major Linux distributions:
+
 - Ubuntu/Debian
 - Fedora/CentOS/RHEL
 - Arch Linux
