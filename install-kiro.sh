@@ -22,9 +22,7 @@ APP_COMMENT="Kiro - AI-powered development environment"
 APP_EXEC="/opt/kiro/bin/kiro"
 APP_ICON="/opt/kiro/resources/app/resources/linux/kiro.png"
 USER_APP_ICON="$HOME/.local/share/kiro/resources/app/resources/linux/kiro.png"
-FAVICON_URL="https://kiro.dev/favicon.ico"
 ICON_URL="./Kiro_1024x1024x32.png"
-TEMP_ICO_FILE="/tmp/kiro_favicon.ico"
 TEMP_PNG_FILE="/tmp/kiro_icon.png"
 
 # Metadata and download URLs
@@ -474,7 +472,7 @@ install_kiro() {
     elif [ -f "$INSTALL_DIR/resources/app/resources/app.png" ]; then
         ICON_PATH="$INSTALL_DIR/resources/app/resources/app.png"
     else
-        # Download favicon as icon
+        # Install local Kiro icon
         download_favicon "$INSTALL_DIR" "$NEED_SUDO"
         ICON_PATH="$INSTALL_DIR/resources/app/resources/linux/kiro.png"
     fi
@@ -655,46 +653,37 @@ download_favicon() {
     local target_dir="$1"
     local need_sudo="$2"
     local icon_dir
-    local temp_png="$TEMP_PNG_FILE"
-    local success=false
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local local_icon="$script_dir/Kiro_1024x1024x32.png"
     
     # Create target directory
     if [ "$need_sudo" = true ]; then
         icon_dir="$target_dir/resources/app/resources/linux"
-        echo -e "${YELLOW}Downloading icon for Kiro...${NC}"
+        echo -e "${YELLOW}Installing Kiro icon...${NC}"
         sudo mkdir -p "$icon_dir"
     else
         icon_dir="$target_dir/resources/app/resources/linux"
-        echo -e "${YELLOW}Downloading icon for Kiro...${NC}"
+        echo -e "${YELLOW}Installing Kiro icon...${NC}"
         mkdir -p "$icon_dir"
     fi
     
-    # Download the icon directly as PNG
-    if command -v wget &> /dev/null; then
-        wget -q "$ICON_URL" -O "$temp_png" && success=true
-    elif command -v curl &> /dev/null; then
-        curl -s "$ICON_URL" -o "$temp_png" && success=true
-    else
-        echo -e "${YELLOW}Warning: Could not download icon. Neither wget nor curl is available.${NC}"
-    fi
-    
-    if [ "$success" = true ]; then
-        # Copy the downloaded PNG to the installation directory
+    # Use the local PNG file
+    if [ -f "$local_icon" ]; then
         if [ "$need_sudo" = true ]; then
-            sudo cp "$temp_png" "$icon_dir/kiro.png" && \
-            echo -e "${GREEN}Successfully downloaded and installed icon.${NC}" && \
-            rm -f "$temp_png" && \
+            sudo cp "$local_icon" "$icon_dir/kiro.png" && \
+            echo -e "${GREEN}Successfully installed Kiro icon.${NC}" && \
             return 0
         else
-            cp "$temp_png" "$icon_dir/kiro.png" && \
-            echo -e "${GREEN}Successfully downloaded and installed icon.${NC}" && \
-            rm -f "$temp_png" && \
+            cp "$local_icon" "$icon_dir/kiro.png" && \
+            echo -e "${GREEN}Successfully installed Kiro icon.${NC}" && \
             return 0
         fi
+    else
+        echo -e "${YELLOW}Warning: Local Kiro icon not found at $local_icon${NC}"
     fi
     
-    # If we failed to get the icon, try using a system fallback icon
-    echo -e "${YELLOW}Failed to download icon. Attempting to use system fallback icon...${NC}"
+    # If we can't find the local icon, try using a system fallback icon
+    echo -e "${YELLOW}Attempting to use system fallback icon...${NC}"
     
     # Try common system icons for code editors
     local system_icons=(
